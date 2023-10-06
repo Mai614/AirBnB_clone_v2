@@ -1,39 +1,41 @@
 #!/usr/bin/python3
 """
-a Fabric script (based on the file 1-pack_web_static.py) 
+a Fabric script (based on the file 1-pack_web_static.py)
 """
-from os import path
-from fabric.api import env, put, run
+from fabric.api import *
+from os.path import exists
 
-env.hosts = ["54.173.91.144", "54.157.134.6"]
+env.hosts = ['54.173.91.144', '54.157.134.6']
 
 def do_deploy(archive_path):
     """
-    Distributes archives to web servers
+    Distributes an archive to web servers
     """
-    if not path.exists(archive_path):
+    if not exists(archive_path):
         return False
-    compressedFile = archive_path.split("/")[-1]
-    fileName = compressedFile.split(".")[0]
-    upload_path = "/tmp/{}".format(compressedFile)
-    if put(archive_path, upload_path).failed:
+
+    try:
+        put(archive_path, '/tmp/')
+
+        filename = archive_path.split('/')[-1]
+        folder_name = filename.replace('.tgz', '')
+
+        # Uncompress the archive to /data/web_static/releases/<folder_name>
+        run('mkdir -p /data/web_static/releases/{}/'.format(folder_name))
+        run('tar -xzf /tmp/{} -C /data/web_static/releases/{}/'.format(filename, folder_name))
+
+        run('rm /tmp/{}'.format(filename))
+
+        run('mv /data/web_static/releases/{}/web_static/* /data/web_static/releases/{}/'.format(folder_name, folder_name))
+
+        run('rm -rf /data/web_static/releases/{}/web_static'.format(folder_name))
+
+        run('rm -rf /data/web_static/current')
+
+        run('ln -s /data/web_static/releases/{}/ /data/web_static/current'.format(folder_name))
+
+        print("New version deployed!")
+        return True
+    except Exception as e:
+        print(e)
         return False
-    current_release = '/data/web_static/releases/{}'.format(fileName)
-    if run("rm -rf {}".format(current_release)).failed:
-        return False
-    if run("mkdir -p {}".format(current_release)).failed:
-        return False
-    uncompress = "tar -xzf /tmp/{} -C {}".format(
-        compressedFile, current_release
-    )
-    if run(uncompress).failed:
-        return False
-    delete_archive = "rm -f /tmp/{}".format(compressedFile)
-    if run(delete_archive).failed:
-        return False
-    if run("rm -rf /data/web_static/current").failed:
-        return False
-    relink = "ln -s {} /data/web_static/current".format(current_release)
-    if run(relink).failed:
-        return False
-    return True

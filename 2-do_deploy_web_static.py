@@ -1,41 +1,65 @@
 #!/usr/bin/python3
 """
-a Fabric script (based on the file 1-pack_web_static.py)
+Fabric script for packing and deploying a web_static archive
 """
-from fabric.api import *
-from os.path import exists
+from fabric.api import env, local, put, run
+from os import path
+from datetime import datetime
 
-env.hosts = ['54.173.91.144', '54.157.134.6']
+env.hosts = ["54.173.91.144", "54.157.134.6"]
+
+def do_pack():
+    """
+    Generates a .tgz archive from the contents of the web_static folder.
+    """
+    try:
+        if not path.exists("versions"):
+            local("mkdir -p versions")
+        now = datetime.now()
+        archive_name = "web_static_{}{}{}{}{}{}.tgz".format(
+            now.year, now.month, now.day, now.hour, now.minute, now.second
+        )
+        local("tar -czvf versions/{} web_static".format(archive_name))
+        return "versions/{}".format(archive_name)
+    except Exception as e:
+        print("Error: {}".format(e))
+        return None
 
 def do_deploy(archive_path):
     """
     Distributes an archive to web servers
     """
-    if not exists(archive_path):
+    if not path.exists(archive_path):
+        print(f"Error: Archive not found at {archive_path}")
         return False
-
+    
     try:
-        put(archive_path, '/tmp/')
+        compressed_file = path.basename(archive_path)
+        file_name = compressed_file.split(".")[0]
+        upload_path = f"/tmp/{compressed_file}"
+        current_release = f'/data/web_static/releases/{file_name}'
+        
+        print(f"Uploading archive to {env.hosts}...")
+        put(archive_path, upload_path)
 
-        filename = archive_path.split('/')[-1]
-        folder_name = filename.replace('.tgz', '')
+        print(f"Removing existing release: {current_release}")
+        run(f"rm -rf {current_release}")
 
-        # Uncompress the archive to /data/web_static/releases/<folder_name>
-        run('mkdir -p /data/web_static/releases/{}/'.format(folder_name))
-        run('tar -xzf /tmp/{} -C /data/web_static/releases/{}/'.format(filename, folder_name))
+        print(f"Creating new release directory: {current_release}")
+        run(f"mkdir -p {current_release}")
 
-        run('rm /tmp/{}'.format(filename))
+        print(f"Extracting archive to {current_release}")
+        run(f"tar -xzf {upload_path} -C {current_release}")
 
-        run('mv /data/web_static/releases/{}/web_static/* /data/web_static/releases/{}/'.format(folder_name, folder_name))
+        print(f"Deleting uploaded archive: {upload_path}")
+        run(f"rm -f {upload_path}")
 
-        run('rm -rf /data/web_static/releases/{}/web_static'.format(folder_name))
+        print("Updating symbolic link /data/web_static/current")
+        run(f"rm -rf /data/web_static/current && ln -s {current_release} /data/web_static/current")
 
-        run('rm -rf /data/web_static/current')
-
-        run('ln -s /data/web_static/releases/{}/ /data/web_static/current'.format(folder_name))
-
-        print("New version deployed!")
+        print("Deployment completed successfully!")
         return True
+
     except Exception as e:
-        print(e)
+        print(f"Error: {e}")
         return False

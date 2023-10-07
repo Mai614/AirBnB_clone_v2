@@ -19,7 +19,9 @@ def do_pack():
             os.makedirs("versions")
 
         now = datetime.now()
-        archive_name = "web_static_{}{}{}{}{}{}.tgz".format(now.year, now.month, now.day, now.hour, now.minute, now.second)
+        archive_name = "web_static_{}{}{}{}{}{}.tgz".format(
+            now.year, now.month, now.day, now.hour, now.minute, now.second
+        )
 
         # Use capture to handle the output and errors properly
         result = local("tar -czvf versions/{} web_static".format(archive_name), capture=True)

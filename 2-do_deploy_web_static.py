@@ -32,7 +32,7 @@ def do_deploy(archive_path):
     if not path.exists(archive_path):
         print(f"Error: Archive not found at {archive_path}")
         return False
-    
+
     try:
         compressed_file = path.basename(archive_path)
         file_name = compressed_file.split(".")[0]

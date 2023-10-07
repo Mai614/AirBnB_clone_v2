@@ -2,7 +2,6 @@
 """
 a Fabric script (based on the file 3-deploy_web_static.py)
 """
-
 from fabric.api import *
 from os.path import isdir, join
 from datetime import datetime

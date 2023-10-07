@@ -1,39 +1,65 @@
 #!/usr/bin/python3
 """
-a Fabric script (based on the file 1-pack_web_static.py) 
+Fabric script for packing and deploying a web_static archive
 """
+from fabric.api import env, local, put, run
 from os import path
-from fabric.api import env, put, run
+from datetime import datetime
 
 env.hosts = ["54.173.91.144", "54.157.134.6"]
 
+def do_pack():
+    """
+    Generates a .tgz archive from the contents of the web_static folder.
+    """
+    try:
+        if not path.exists("versions"):
+            local("mkdir -p versions")
+        now = datetime.now()
+        archive_name = "web_static_{}{}{}{}{}{}.tgz".format(
+            now.year, now.month, now.day, now.hour, now.minute, now.second
+        )
+        local("tar -czvf versions/{} web_static".format(archive_name))
+        return "versions/{}".format(archive_name)
+    except Exception as e:
+        print("Error: {}".format(e))
+        return None
+
 def do_deploy(archive_path):
     """
-    Distributes archives to web servers
+    Distributes an archive to web servers
     """
     if not path.exists(archive_path):
+        print(f"Error: Archive not found at {archive_path}")
         return False
-    compressedFile = archive_path.split("/")[-1]
-    fileName = compressedFile.split(".")[0]
-    upload_path = "/tmp/{}".format(compressedFile)
-    if put(archive_path, upload_path).failed:
+    
+    try:
+        compressed_file = path.basename(archive_path)
+        file_name = compressed_file.split(".")[0]
+        upload_path = f"/tmp/{compressed_file}"
+        current_release = f'/data/web_static/releases/{file_name}'
+        
+        print(f"Uploading archive to {env.hosts}...")
+        put(archive_path, upload_path)
+
+        print(f"Removing existing release: {current_release}")
+        run(f"rm -rf {current_release}")
+
+        print(f"Creating new release directory: {current_release}")
+        run(f"mkdir -p {current_release}")
+
+        print(f"Extracting archive to {current_release}")
+        run(f"tar -xzf {upload_path} -C {current_release}")
+
+        print(f"Deleting uploaded archive: {upload_path}")
+        run(f"rm -f {upload_path}")
+
+        print("Updating symbolic link /data/web_static/current")
+        run(f"rm -rf /data/web_static/current && ln -s {current_release} /data/web_static/current")
+
+        print("Deployment completed successfully!")
+        return True
+
+    except Exception as e:
+        print(f"Error: {e}")
         return False
-    current_release = '/data/web_static/releases/{}'.format(fileName)
-    if run("rm -rf {}".format(current_release)).failed:
-        return False
-    if run("mkdir -p {}".format(current_release)).failed:
-        return False
-    uncompress = "tar -xzf /tmp/{} -C {}".format(
-        compressedFile, current_release
-    )
-    if run(uncompress).failed:
-        return False
-    delete_archive = "rm -f /tmp/{}".format(compressedFile)
-    if run(delete_archive).failed:
-        return False
-    if run("rm -rf /data/web_static/current").failed:
-        return False
-    relink = "ln -s {} /data/web_static/current".format(current_release)
-    if run(relink).failed:
-        return False
-    return True

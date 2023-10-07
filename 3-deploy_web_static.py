@@ -1,30 +1,30 @@
 #!/usr/bin/python3
 """
-a Fabric script (based on the file 2-do_deploy_web_static.py) that creates and distributes 
+A Fabric script that creates and distributes an archive to web servers
 """
+
+from fabric.api import env, local, put, run
 from os import path
 from datetime import datetime
-from fabric.api import env, local, put, run
 
 env.hosts = ["54.173.91.144", "54.157.134.6"]
 
-
 def do_pack():
     """
-    A function that generates an archive
+    Generates a .tgz archive from the contents of the web_static folder.
     """
-    date = datetime.now()
-    archive = "versions/web_static_{}{}{}{}{}{}.tgz".format(
-        date.year, date.month, date.day,
-        date.hour, date.minute, date.second
-    )
-    if not path.isdir("versions"):
-        if local("mkdir versions").failed:
-            return None
-    cmd = "cd web_static && tar -cvzf ../{} . && cd -".format(archive)
-    if local(cmd).succeeded:
-        return archive
-    return None
+    try:
+        local("mkdir -p versions")
+        date = datetime.now()
+        archive_name = "web_static_{}{}{}{}{}{}.tgz".format(
+            date.year, date.month, date.day,
+            date.hour, date.minute, date.second
+        )
+        local("tar -cvzf versions/{} web_static".format(archive_name))
+        return "versions/{}".format(archive_name)
+    except Exception as e:
+        print("Error: {}".format(e))
+        return None
 
 def do_deploy(archive_path):
     """
@@ -34,30 +34,23 @@ def do_deploy(archive_path):
     """
     if not path.exists(archive_path):
         return False
-    compressedFile = archive_path.split("/")[-1]
-    fileName = compressedFile.split(".")[0]
-    upload_path = "/tmp/{}".format(compressedFile)
-    if put(archive_path, upload_path).failed:
+    try:
+        file_name = path.basename(archive_path).split(".")[0]
+        upload_path = "/tmp/{}".format(path.basename(archive_path))
+        current_release = '/data/web_static/releases/{}'.format(file_name)
+
+        put(archive_path, upload_path)
+
+        run("mkdir -p {}".format(current_release))
+        run("tar -xzf {} -C {}".format(upload_path, current_release))
+        run("rm -f {}".format(upload_path))
+        run("rm -rf /data/web_static/current")
+        run("ln -s {} /data/web_static/current".format(current_release))
+
+        return True
+    except Exception as e:
+        print("Error: {}".format(e))
         return False
-    current_release = '/data/web_static/releases/{}'.format(fileName)
-    if run("rm -rf {}".format(current_release)).failed:
-        return False
-    if run("mkdir {}".format(current_release)).failed:
-        return False
-    uncompress = "tar -xzf /tmp/{} -C {}".format(
-        compressedFile, current_release
-    )
-    if run(uncompress).failed:
-        return False
-    delete_archive = "rm -f /tmp/{}".format(compressedFile)
-    if run(delete_archive).failed:
-        return False
-    if run("rm -rf /data/web_static/current").failed:
-        return False
-    relink = "ln -s {} /data/web_static/current".format(current_release)
-    if run(relink).failed:
-        return False
-    return True
 
 def deploy():
     """
